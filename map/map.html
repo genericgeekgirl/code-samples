@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+{% load staticfiles %}
+{% load floppyforms %}
+
+{% block content %}
+
+<script src="{% static 'script/d3.min.js' %}"></script>
+<script src="{% static 'script/topojson.min.js' %}"></script>
+<script src="{% static 'script/datamaps.all.min.js' %}"></script>
+
+<div class="visualization-container col-md-12">
+    
+    <div class="col-xs-1"></div>
+    <div class="col-xs-10">
+        <div class="row">
+            <div class="col-lg-7 col-xs-12">
+
+                <div class="top bottom">
+                    <h3 class="center">Select an airport to see detailed delay predictions.</h3>
+                    <h2 class="center">We use predictive analytics to track patterns across millions of flights.</h2>
+                </div>
+
+                <div id="map-container"></div>
+
+            </div>
+
+            <div class="col-md-1"></div>
+
+            <div class="map-details-container col-lg-4 col-xs-12">
+
+                <div class="airport-details-container hidden-on-mobile no-padding">
+                    <div id="airport-heading"></div>
+                    <div id="airport-chart"></div>
+                </div>
+
+                <div id="airport-legend">
+                    <h2>One or more hours are predicted to have the following delay severity over the next 24 hours:</h2>
+                    <ul class="legend-container">
+                        <li class="low"><span class="legend-details">delay likelihood <25%</span></li>
+                                                                                           <li class="medium"><span class="legend-details">delay likelihood 25-50%</span></li>
+                        <li class="high"><span class="legend-details">delay likelihood 50+%</span></li>
+                    </ul>
+                </div>
+
+            </div>
+        </div>
+        
+    </div>
+</div>      
+
+<script type="text/javascript">
+
+(function () {window.airports = {{airports|safe}};})();
+
+var map = new Datamap({
+    element: document.getElementById('map-container'),
+    responsive: true,
+    aspectRatio: 0.5625,
+    fills: {
+        defaultFill: '#EFEFEF',
+        high: '#A3394D',
+        medium: '#B7884B',
+        low: '#7FC25B',
+    },
+    scope: 'usa',
+    geographyConfig: {
+        borderColor: 'EFEFEF',
+        highlightOnHover: false,
+        popupOnHover: false,
+            <!-- hideHawaiiAndAlaska: true, -->
+    },
+    responsive: true,
+    
+    setProjection: function(element) {
+        var projection = d3.geo.albersUsa()
+            .scale(750)
+            .translate([element.offsetWidth - 400, element.offsetHeight - 300]);
+        var path = d3.geo.path()
+            .projection(projection);
+        return {path: path, projection: projection};
+    },
+});
+
+window.addEventListener('resize', function() {
+    map.resize();
+});
+
+map.addPlugin('addLines', function(layer, data) {
+    var self = this;
+    var className = 'addLines';
+    
+    var lines = layer
+        .selectAll(className)
+        .data(airports, JSON.stringify);
+    
+});
+
+map.bubbles(airports, {borderWidth: 0,
+                       borderColor: 'grey',
+                       radius: 10,
+                       highlightBorderColor: '#EFEFEF',
+                       highlightBorderWidth: 5,
+                       fillOpacity: 1,
+                       highlightFillOpacity: 1,
+                       popupOnHover: true,
+                       popupTemplate: function(geo, d) {
+                           update_airport_details(d);
+                           return '<div class="hoverinfo">' +  d.name + '</div>';
+                       },
+                      });
+
+
+var update_airport_details = function (airport) {
+        
+    document.getElementById("airport-heading").innerHTML = "<h2>Arrival delay outlook for<br />" + airport.name + ":</h2>";
+
+    var chart = "";
+
+    var blank_line = generate_blank_line();
+
+    var times = [];
+    
+    for (var iata in airport.airports) {
+
+        for (var key in airport.airports[iata]) {
+            var [time, risk] = airport.airports[iata][key];
+            times.push(time);
+        }
+        
+        chart = chart.concat('<tr><td>' + iata + '</td>');
+        for (var key in airport.airports[iata]) {
+            var [time, risk] = airport.airports[iata][key];
+            tooltip = generate_tooltip(key, times);
+            chart = chart.concat('<td class="color ' + risk + '" data-toggle="tooltip" title="' + tooltip + '"></td>');
+        }
+        chart = chart.concat('</tr>');
+        chart = chart.concat(blank_line);
+    }
+
+    heading = generate_header(times);
+
+    document.getElementById("airport-chart").innerHTML = '<table class="chart">' + heading  + chart + "</table>";
+
+    $(".airport-details-container").removeClass("hidden-on-mobile");
+}
+
+
+var generate_tooltip = function(key, times) {
+
+    var time_start = times[key];
+    
+    var time_end = 0;
+
+    var next_key = String(parseInt(key) + 1);
+    
+    if (times[next_key]) {
+        time_end = times[next_key]
+    }
+    else {
+        time_end = times[0];
+    }
+    
+    tooltip = time_start + "-" + time_end
+    return tooltip;
+}
+
+
+var generate_header = function(times) {
+
+    heading = "<td></td>";
+
+    for (var i=0; i<=24; i+=12) {
+        string = "";
+        if (i == 0) {
+            string = "NOW<br />" + times[i];
+        }
+        else if (i == 12) {
+            string = "<br />" + times[i];
+        }
+        else if (i == 24) {
+            string = "<br />" + times[0];
+        }
+        heading = heading.concat('<td colspan="12" class="text">' + string + '</td>');
+    }
+    
+    return "<tr>" + heading + "</tr>";
+}
+
+var generate_blank_line = function() {
+
+    var blank_line = "";
+
+    for (var i=0; i<=24; i++) {
+        blank_line = blank_line.concat('<td class="blank"></td>');
+    }
+
+    return "<tr>" + blank_line + "</tr>";
+}
+
+
+map.addPlugin('addLabels', function(layer, data) {
+    var self = this;
+    var className = 'addLabels';
+
+    var labels = layer
+        .selectAll(className)
+        .data(airports, JSON.stringify);
+
+    labels
+        .enter()
+        .append('text')
+        .attr('class', className)
+        .attr('x', function ( d ) {
+            if (['WAS', 'PHL', 'NYC'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[0] + 35; }
+            if (['CLE'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[0] + 25; }
+            if (['TPA'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[0] - 25; }
+            return self.latLngToXY(d.latitude, d.longitude)[0];
+        })
+        .attr('y', function ( d ) {
+            if (['SAN', 'PDX', 'QMI', 'IAH', 'MEM', 'ATL', 'CVG', 'PIT', 'CLT'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[1] + 30; }
+            if (['WAS'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[1] + 25 }
+            if (['NYC'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[1] + 10 }
+            if (['PHL'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[1] + 20 }
+            if (['CLE'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[1] - 10; }
+            if (['TPA'].indexOf(d.iata) > -1) { return self.latLngToXY(d.latitude, d.longitude)[1] + 20 ; }
+            return self.latLngToXY(d.latitude, d.longitude)[1] - 15;
+        })
+        .text(function(d) {
+            if (d.iata == 'QMI') {
+                return 'MIA';
+            }
+            return d.iata;
+        })
+        .attr("font-size", "20px")
+        .attr("text-anchor", "middle");
+});
+
+map.addLabels(airports); 
+
+$(window).on('resize', function() {
+    map.resize();
+});
+
+</script>
+
+
+{% endblock %}

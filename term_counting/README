@@ -1,0 +1,21 @@
+usage: word_count.py [-h] [--json] [-n CUTOFF] textfile
+
+positional arguments:
+  textfile       text file to analyze
+
+optional arguments:
+  --json         display results in JSON format
+  -n CUTOFF      number of "most common" words to show (defaults to 10)
+ 
+
+Notes:
+
+Python version: 2.7.15
+
+I've included one file, 57110-0.txt, to run the script against.
+
+Tests are in tests.py, and can be run with the command `python -m unittest tests`
+tests.py utilizes the file aesop.txt
+
+Other notes are expressed as comments in word_count.py
+
